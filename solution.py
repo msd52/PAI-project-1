@@ -34,6 +34,7 @@ class Model(object):
         self.rng = np.random.default_rng(seed=0)
 
         # TODO: Add custom initialization for your model here if necessary
+        self.model = None
 
     def make_predictions(self, test_features: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -48,6 +49,9 @@ class Model(object):
         gp_mean = np.zeros(test_features.shape[0], dtype=float)
         gp_std = np.zeros(test_features.shape[0], dtype=float)
 
+        gp_mean, gp_std = self.model.predict(test_features, return_std = True)
+
+
         # TODO: Use the GP posterior to form your predictions here
         predictions = gp_mean
 
@@ -61,6 +65,9 @@ class Model(object):
         """
 
         # TODO: Fit your model here
+        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-1, 10.0))
+        self.model = GaussianProcessRegressor(kernel=kernel, random_state=0)
+        self.model.fit(X = train_features[1:150], y = train_GT[1:150])
         pass
 
 
