@@ -1,5 +1,6 @@
 import os
 import typing
+
 from sklearn.gaussian_process.kernels import *
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -65,10 +66,15 @@ class Model(object):
         """
 
         # TODO: Fit your model here
-        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-1, 10.0))
-        self.model = GaussianProcessRegressor(kernel=kernel, random_state=0)
-        self.model.fit(X = train_features[1:150], y = train_GT[1:150])
+        kernel = 1.0 * RBF(length_scale=0.01, length_scale_bounds=(1e-3, 1e2))
+        self.model = GaussianProcessRegressor(kernel=kernel, random_state=42)
+        size = int(0.2*len(train_features)) # select 10% of the data
+        indexes = self.get_random_data_indexes(size, len(train_features))
+        self.model.fit(X = train_features[indexes], y = train_GT[indexes])
         pass
+
+    def get_random_data_indexes(self, size, max_index):
+        return np.random.randint(0, max_index, size)
 
 
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray) -> float:
