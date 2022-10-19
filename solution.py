@@ -19,102 +19,10 @@ COST_W_UNDERPREDICT = 25.0
 COST_W_NORMAL = 1.0
 COST_W_OVERPREDICT = 10.0
 
-# class ExactGP(gpytorch.models.ExactGP):
-#     def __init__(self, train_x, train_y, kernel):
-#         super().__init__(train_x, train_y, likelihood=gpytorch.likelihoods.GaussianLikelihood())
-#         self.mean_module = gpytorch.means.ZeroMean()
-#         self.covar_module = kernel
-
-#     def forward(self, x):
-#         """Forward computation of GP."""
-#         mean_x = self.mean_module(x)
-#         covar_x = self.covar_module(x)
-#         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-#     @property
-#     def output_scale(self):
-#         """Get output scale."""
-#         return self.covar_module.outputscale
-
-#     @output_scale.setter
-#     def output_scale(self, value):
-#         """Set output scale."""
-#         if not isinstance(value, torch.Tensor):
-#             value = torch.tensor([value])
-#         self.covar_module.outputscale = value
-        
-#     @property
-#     def length_scale(self):
-#         """Get length scale."""
-#         ls = self.covar_module.base_kernel.kernels[0].lengthscale
-#         if ls is None:
-#             ls = torch.tensor(0.0)
-#         return ls 
-
-#     @length_scale.setter
-#     def length_scale(self, value):
-#         """Set length scale."""
-#         if not isinstance(value, torch.Tensor):
-#             value = torch.tensor([value])
-        
-#         try: 
-#             self.covar_module.lengthscale = value 
-#         except RuntimeError:
-#             pass 
-        
-#         try:
-#             self.covar_module.base_kernel.lengthscale = value
-#         except RuntimeError:
-#             pass
-    
-#         try:
-#             for kernel in self.covar_module.base_kernel.kernels:
-#                 kernel.lengthscale = value 
-#         except RuntimeError:
-#             pass
-    
-
-# def get_kernel(kernel, composition="addition"):
-#     base_kernel = []
-#     if "RBF" in kernel:
-#         base_kernel.append(gpytorch.kernels.RBFKernel())
-#     if "linear" in kernel:
-#         base_kernel.append(gpytorch.kernels.LinearKernel())
-#     if "quadratic" in kernel:
-#         base_kernel.append(gpytorch.kernels.PolynomialKernel(power=2))
-#     if "Matern-1/2" in kernel:
-#         base_kernel.append(gpytorch.kernels.MaternKernel(nu=1/2))
-#     if "Matern-3/2" in kernel:
-#         base_kernel.append(gpytorch.kernels.MaternKernel(nu=3/2))
-#     if "Matern-5/2" in kernel:
-#         base_kernel.append(gpytorch.kernels.MaternKernel(nu=5/2))
-#     if "Cosine" in kernel:
-#         base_kernel.append(gpytorch.kernels.CosineKernel())
-
-#     if composition == "addition":
-#         base_kernel = gpytorch.kernels.AdditiveKernel(*base_kernel)
-#     elif composition == "product":
-#         base_kernel = gpytorch.kernels.ProductKernel(*base_kernel)
-#     else:
-#         raise NotImplementedError
-#     kernel = gpytorch.kernels.ScaleKernel(base_kernel)
-#     return kernel 
-
-# def gp_regression(train_x, train_y, test_x, lengthscale, outputscale, noise, kernel, composition):
-#     kernel = get_kernel(kernel, composition)
-#     model = ExactGP(train_x, train_y, kernel)
-
-#     # Set hyper-parameters
-#     model.length_scale = lengthscale
-#     model.output_scale = outputscale
-#     model.likelihood.noise = torch.tensor([noise])
-    
-#     return model 
 
 
 
-
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+from sklearn.gaussian_process.kernels import RBF, Matern, ConstantKernel, DotProduct
 
 class Model(object):
     """
@@ -129,10 +37,13 @@ class Model(object):
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
-        first_kernel = RBF(1.0, length_scale_bounds=(1e-05, 10000.0))#+ConstantKernel(constant_value=0.0, constant_value_bounds=(1e-05, 100000.0))
-        self.gaussian_process = GaussianProcessRegressor(kernel=first_kernel, n_restarts_optimizer=50, random_state=0)
-        # second_kernel = 
-
+        first_kernel = ConstantKernel()*Matern()+ConstantKernel()*RBF()+ConstantKernel()*DotProduct()#ConstantKernel(constant_value=0.0, constant_value_bounds=(1e-05, 100000.0))
+        self.gaussian_process = GaussianProcessRegressor(kernel=first_kernel, n_restarts_optimizer=5, normalize_y=True, random_state=0)
+        # self.gp_2dlist = []
+        # for x in range(0,2):
+        #     self.gp_2dlist.append([])
+        #     for y in range(0,2):
+        #         self.gp_2dlist[-1].append(GaussianProcessRegressor(kernel=RBF(1.0, length_scale_bounds=(1e-05, 10000.0)), n_restarts_optimizer=60, random_state=0))
 
         # TODO: Add custom initialization for your model here if necessary
 
@@ -146,19 +57,33 @@ class Model(object):
         """
 
         # TODO: Use your GP to estimate the posterior mean and stddev for each location here
-        # gp_mean = np.zeros(test_features.shape[0], dtype=float)
-        # gp_std = np.zeros(test_features.shape[0], dtype=float)
         gp_mean, gp_std = self.gaussian_process.predict(test_features, return_std=True)
 
 
         # TODO: Use the GP posterior to form your predictions here
-        predictions = self.gaussian_process.sample_y(test_features, random_state=0)[:,0]
+        # gp_mean = np.ones_like(test_features[:,0])
+        # gp_std = np.ones_like(test_features[:,0])
+        # count=0
+        # for x in range(0,2):
+        #     for y in range(0,2):
+        #         local_gp = self.gp_2dlist[x][y]
+        #         bool_array = np.logical_and(np.logical_and(test_features[:,0]>=0.2*x,test_features[:,0]<=0.2*(x+1)),np.logical_and(test_features[:,1]>=0.2*y,test_features[:,1]<=0.2*(y+1)))
+        #         inds = np.where(bool_array)[0]
+        #         count += len(inds)
+        #         print(f"going to predict x={x} y={y} with ds size {len(inds)} (len is {count} so far)")
+        #         gp_mean[inds], gp_std[inds] = local_gp.predict(test_features[inds,:], return_std=True)
 
-        print(f"predictions has dimensions {predictions.shape}")
-        print(f"gp_mean has dimensions {gp_mean.shape}")
-        print(f"gp_Std has dimensions {gp_std.shape}")
+        # predictions = gp_mean*1.1
+        # return (predictions, gp_mean, gp_std)
 
-        return (1.15*predictions, gp_mean, gp_std)
+        #predictions = self.gaussian_process.sample_y(test_features, random_state=0)[:,0]
+        predictions = gp_mean
+
+        # print(f"predictions has dimensions {predictions.shape}")
+        # print(f"gp_mean has dimensions {gp_mean.shape}")
+        # print(f"gp_Std has dimensions {gp_std.shape}")
+
+        return (1.05*predictions, gp_mean, gp_std)
 
     def fitting_model(self, train_GT: np.ndarray,train_features: np.ndarray):
         """
@@ -191,10 +116,24 @@ class Model(object):
         # closest_points_labels = np.array(closest_points_labels)
 
         # self.gaussian_process.fit(closest_points_coords, closest_points_labels)
-        idx = np.random.randint(15000, size=3000)
-        sample_train_features = train_features[:3000] #train_features[idx,:] 
-        sample_train_GT = train_GT[:3000] #train_GT[idx]
-        
+
+        # count=0
+        # for x in range(0,5):
+        #     for y in range(0,5):
+        #         local_gp = self.gp_2dlist[x][y]
+        #         bool_array = np.logical_and(np.logical_and(train_features[:,0]>=0.2*x,train_features[:,0]<=0.2*(x+1)),np.logical_and(train_features[:,1]>=0.2*y,train_features[:,1]<=0.2*(y+1)))
+        #         inds = np.where(bool_array)[0]
+        #         count += len(inds)
+        #         print(f"going to fit x={x} y={y} with ds size {len(inds)} (len is {count} so far)")
+        #         local_gp.fit(train_features[inds,:],train_GT[inds])
+
+        # idx = np.random.randint(15000, size=3000)
+        inds = np.random.choice(range(len(train_features)), 3000)
+        # sample_train_features = train_features[inds] #train_features[:3000]
+        # sample_train_GT = train_GT[inds] #train_GT[:3000]
+        sample_train_features = train_features[:3000]
+        sample_train_GT = train_GT[:3000]   
+
         print(f"before fit")
         self.gaussian_process.fit(sample_train_features, sample_train_GT)
         print(f"after fit")
