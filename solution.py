@@ -1,6 +1,7 @@
 import os
 import typing
 
+from sklearn.cluster import KMeans
 from sklearn.gaussian_process.kernels import *
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -66,15 +67,66 @@ class Model(object):
         """
 
         # TODO: Fit your model here
-        kernel = 1.0 * RBF(length_scale=0.01, length_scale_bounds=(1e-3, 1e2))
-        self.model = GaussianProcessRegressor(kernel=kernel, random_state=42)
-        size = int(0.2*len(train_features)) # select 10% of the data
-        indexes = self.get_random_data_indexes(size, len(train_features))
-        self.model.fit(X = train_features[indexes], y = train_GT[indexes])
+        kernel1 = 2.5 * RBF(length_scale=100, length_scale_bounds=(1e-4, 1e2))
+        kernel2 = 5 * Matern(length_scale=1.0, nu=0.01)
+        self.model = GaussianProcessRegressor(kernel=kernel1,random_state=42)
+        # size = int(0.4*len(train_features)) # select 10% of the data
+        # indexes = self.get_random_data_indexes(size, len(train_features))
+        clustered_x, clustered_y = self.get_sample_from_clustered_data(train_features, train_GT)
+        self.model.fit(X = train_features[0:2999], y = train_GT[0:2999])
+        #self.model.fit(X=clustered_x, y=clustered_y)
+
         pass
 
     def get_random_data_indexes(self, size, max_index):
         return np.random.randint(0, max_index, size)
+
+    def get_random_sample(x, y, size):
+        '''Method to randomly sample data from the dataset. Returns two
+        numpy arrays in the form features, values.
+        '''
+        max_index = len(x)
+        index = np.random.randint(0, max_index, size)
+        return x.iloc[index, :], y.iloc[index, :]
+
+    def get_sample_from_clustered_data(x, y):
+        '''Method to sample data from the clusters. Returns two numpy arrays in the form
+        features, value'''
+
+        n_clusters = 3000
+        kmeans = KMeans(n_clusters=n_clusters, init='k-means++', random_state=42)
+        kmeans.fit(x)
+
+        centers = kmeans.cluster_centers_
+        labels = kmeans.labels_
+
+        min_dists = [np.inf for i in range(len(centers))]
+        indices = [-1 for i in range(len(centers))]
+
+        for idx in range(len(x)):
+            feat = x[idx]
+            label = labels[idx]
+            dist = np.sqrt((feat[0] - centers[label][0]) ** 2 + (feat[1] - centers[label][1]) ** 2)
+
+            if dist < min_dists[label]:
+                min_dists[label] = dist
+                indices[label] = idx
+
+        new_feats = []
+        new_gds = []
+        for idx in range(len(indices)):
+            index = indices[idx]
+            if index == -1:
+                continue
+            new_feats.append(x[index])
+            new_gds.append(y[index])
+
+        new_feats = np.array(new_feats)
+        new_gds = np.array(new_gds)
+        return new_feats, new_gds
+
+
+
 
 
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray) -> float:
@@ -87,6 +139,9 @@ def cost_function(ground_truth: np.ndarray, predictions: np.ndarray) -> float:
     """
     assert ground_truth.ndim == 1 and predictions.ndim == 1 and ground_truth.shape == predictions.shape
 
+    my_file = open('test_y.csv', 'a')
+    my_file.write(ground_truth)
+    print("Finished writing to file!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     # Unweighted cost
     cost = (ground_truth - predictions) ** 2
     weights = np.ones_like(cost) * COST_W_NORMAL
