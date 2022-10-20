@@ -20,8 +20,6 @@ COST_W_NORMAL = 1.0
 COST_W_OVERPREDICT = 10.0
 
 
-
-
 from sklearn.gaussian_process.kernels import RBF, Matern, ConstantKernel, DotProduct
 
 class Model(object):
@@ -36,16 +34,63 @@ class Model(object):
         Initialize your model here.
         We already provide a random number generator for reproducibility.
         """
-        self.rng = np.random.default_rng(seed=0)
-        first_kernel = ConstantKernel()*Matern()+ConstantKernel()*RBF()+ConstantKernel()*DotProduct()#ConstantKernel(constant_value=0.0, constant_value_bounds=(1e-05, 100000.0))
-        self.gaussian_process = GaussianProcessRegressor(kernel=first_kernel, n_restarts_optimizer=5, normalize_y=True, random_state=0)
-        # self.gp_2dlist = []
-        # for x in range(0,2):
-        #     self.gp_2dlist.append([])
-        #     for y in range(0,2):
-        #         self.gp_2dlist[-1].append(GaussianProcessRegressor(kernel=RBF(1.0, length_scale_bounds=(1e-05, 10000.0)), n_restarts_optimizer=60, random_state=0))
 
+        self.rng = np.random.default_rng(seed=0)
         # TODO: Add custom initialization for your model here if necessary
+        
+        # Load the training dateset and test features for model selection
+        train_features = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
+        train_GT = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
+        test_features = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
+
+        # Add list of kernels to test for model selection
+        kernels = []
+        kernel_names = []
+
+        kernel1 = DotProduct()
+        kernels.append(kernel1)
+        kernel_names.append('DotProduct()')
+
+        kernel2 = RationalQuadratic(length_scale=1.0, alpha=1.5)
+        kernels.append(kernel2)
+        kernel_names.append('RationalQuadratic(length_scale=1.0, alpha=1.5)')
+
+        kernel3 = Matern(length_scale=1.0, nu=0.01)
+        kernels.append(kernel3)
+        kernel_names.append('Matern(length_scale=1.0, nu=0.01)')
+
+        kernel4 = RBF(length_scale=100, length_scale_bounds=(1e-4, 1e2))
+        kernels.append(kernel4)
+        kernel_names.append('RBF(length_scale=100, length_scale_bounds=(1e-4, 1e2))')
+
+        kernel5 = ConstantKernel()*Matern()
+        kernels.append(kernel5)
+        kernel_names.append('ConstantKernel()*Matern()')
+
+        kernel6 = ConstantKernel()*RBF()
+        kernels.append(kernel6)
+        kernel_names.append('ConstantKernel()*RBF()')
+
+        kernel7 = ConstantKernel()*Matern()+ConstantKernel()*RBF()+ConstantKernel()*DotProduct()
+        kernels.append(kernel7)
+        kernel_names.append('ConstantKernel()*Matern()+ConstantKernel()*RBF()+ConstantKernel()*DotProduct()')
+
+        # Perform model selection and choose the best kernel
+        bestKernel = None
+        bestValue = -500000
+        for idx, kernel_param in enumerate(kernels):
+            print('Fitting model' + kernel_names[idx])
+            self.gaussian_process = GaussianProcessRegressor(kernel=kernel_param, n_restarts_optimizer=5, normalize_y=True, random_state=0)
+            self.fitting_model(train_GT, train_features)
+
+            print(self.gaussian_process.log_marginal_likelihood_value_)
+            if model.gaussian_process.log_marginal_likelihood_value_ > bestValue:
+                bestKernel = kernel_param
+                bestValue = self.gaussian_process.log_marginal_likelihood_value_
+
+        # create the GP with the best kernel that has the highest log_marginal_likelihood_value_
+        self.gaussian_process = GaussianProcessRegressor(kernel=bestKernel, n_restarts_optimizer=5, normalize_y=True, random_state=0)
+
 
     def make_predictions(self, test_features: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -59,30 +104,8 @@ class Model(object):
         # TODO: Use your GP to estimate the posterior mean and stddev for each location here
         gp_mean, gp_std = self.gaussian_process.predict(test_features, return_std=True)
 
-
         # TODO: Use the GP posterior to form your predictions here
-        # gp_mean = np.ones_like(test_features[:,0])
-        # gp_std = np.ones_like(test_features[:,0])
-        # count=0
-        # for x in range(0,2):
-        #     for y in range(0,2):
-        #         local_gp = self.gp_2dlist[x][y]
-        #         bool_array = np.logical_and(np.logical_and(test_features[:,0]>=0.2*x,test_features[:,0]<=0.2*(x+1)),np.logical_and(test_features[:,1]>=0.2*y,test_features[:,1]<=0.2*(y+1)))
-        #         inds = np.where(bool_array)[0]
-        #         count += len(inds)
-        #         print(f"going to predict x={x} y={y} with ds size {len(inds)} (len is {count} so far)")
-        #         gp_mean[inds], gp_std[inds] = local_gp.predict(test_features[inds,:], return_std=True)
-
-        # predictions = gp_mean*1.1
-        # return (predictions, gp_mean, gp_std)
-
-        #predictions = self.gaussian_process.sample_y(test_features, random_state=0)[:,0]
         predictions = gp_mean
-
-        # print(f"predictions has dimensions {predictions.shape}")
-        # print(f"gp_mean has dimensions {gp_mean.shape}")
-        # print(f"gp_Std has dimensions {gp_std.shape}")
-
         return (1.05*predictions, gp_mean, gp_std)
 
     def fitting_model(self, train_GT: np.ndarray,train_features: np.ndarray):
@@ -94,43 +117,6 @@ class Model(object):
         print("entering fitting model")
 
         # TODO: Fit your model here
-
-        # kmeans = KMeans(n_clusters=7000, random_state=0).fit(train_features)
-        # cluster_centers = kmeans.cluster_centers_
-
-        # closest_points_coords = []
-        # closest_points_labels = []
-        # print("after kmeans")
-        # count = 0
-        # for cc in cluster_centers:
-        #     if count%500==0:
-        #         print(f"count is {count}")
-        #     deltas = train_features - cc
-        #     dist_2 = np.einsum('ij,ij->i', deltas, deltas)
-        #     closest_ind = np.argmin(dist_2)
-        #     closest_points_coords.append(train_features[closest_ind])
-        #     closest_points_labels.append(train_GT[closest_ind])
-        #     count+=1
-        # print("after finding closest to centers")
-        # closest_points_coords = np.array(closest_points_coords)
-        # closest_points_labels = np.array(closest_points_labels)
-
-        # self.gaussian_process.fit(closest_points_coords, closest_points_labels)
-
-        # count=0
-        # for x in range(0,5):
-        #     for y in range(0,5):
-        #         local_gp = self.gp_2dlist[x][y]
-        #         bool_array = np.logical_and(np.logical_and(train_features[:,0]>=0.2*x,train_features[:,0]<=0.2*(x+1)),np.logical_and(train_features[:,1]>=0.2*y,train_features[:,1]<=0.2*(y+1)))
-        #         inds = np.where(bool_array)[0]
-        #         count += len(inds)
-        #         print(f"going to fit x={x} y={y} with ds size {len(inds)} (len is {count} so far)")
-        #         local_gp.fit(train_features[inds,:],train_GT[inds])
-
-        # idx = np.random.randint(15000, size=3000)
-        inds = np.random.choice(range(len(train_features)), 3000)
-        # sample_train_features = train_features[inds] #train_features[:3000]
-        # sample_train_GT = train_GT[inds] #train_GT[:3000]
         sample_train_features = train_features[:3000]
         sample_train_GT = train_GT[:3000]   
 
@@ -144,7 +130,6 @@ class Model(object):
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray) -> float:
     """
     Calculates the cost of a set of predictions.
-
     :param ground_truth: Ground truth pollution levels as a 1d NumPy float array
     :param predictions: Predicted pollution levels as a 1d NumPy float array
     :return: Total cost of all predictions as a single float
@@ -243,14 +228,15 @@ def main():
     train_GT = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_features = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
 
-    # Fit the model
-    print('Fitting model')
-    model = Model()
-    model.fitting_model(train_GT,train_features)
 
+    # Fit the model
+    print('Fitting model in Main')
+    model = Model()
+    model.fitting_model(train_GT,train_features) 
+    
     # Predict on the test features
     print('Predicting on test features')
-    predictions = model.make_predictions(test_features)
+    predictions = bestModel.make_predictions(test_features)
     print(predictions)
 
     if EXTENDED_EVALUATION:
