@@ -46,7 +46,7 @@ class Model(object):
         # Add list of kernels to test for model selection
         kernels = []
         kernel_names = []
-
+        
         kernel1 = DotProduct()
         kernels.append(kernel1)
         kernel_names.append('DotProduct()')
@@ -77,14 +77,16 @@ class Model(object):
 
         # Perform model selection and choose the best kernel
         bestKernel = None
-        bestValue = -500000
+        bestValue = np.NINF
         for idx, kernel_param in enumerate(kernels):
-            print('Fitting model' + kernel_names[idx])
+            print('Fitting model ' + kernel_names[idx])
             self.gaussian_process = GaussianProcessRegressor(kernel=kernel_param, n_restarts_optimizer=5, normalize_y=True, random_state=0)
             self.fitting_model(train_GT, train_features)
 
-            print(self.gaussian_process.log_marginal_likelihood_value_)
-            if model.gaussian_process.log_marginal_likelihood_value_ > bestValue:
+            print('Likelihood of model ' + kernel_names[idx] + " is: "+ str(
+                self.gaussian_process.log_marginal_likelihood_value_))
+            if self.gaussian_process.log_marginal_likelihood_value_ > bestValue:
+                print("Best kernel is updated")
                 bestKernel = kernel_param
                 bestValue = self.gaussian_process.log_marginal_likelihood_value_
 
